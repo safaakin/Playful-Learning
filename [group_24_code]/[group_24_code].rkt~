@@ -1,0 +1,605 @@
+;; The first three lines of this file were inserted by DrRacket. They record metadata
+;; about the language level of this file in a form that our tools can easily process.
+#reader(lib "htdp-advanced-reader.ss" "lang")((modname örnek) (read-case-sensitive #t) (teachpacks ((lib "universe.rkt" "teachpack" "2htdp") (lib "image.rkt" "teachpack" "2htdp"))) (htdp-settings #(#t constructor repeating-decimal #t #t none #f ((lib "universe.rkt" "teachpack" "2htdp") (lib "image.rkt" "teachpack" "2htdp")) #f)))
+
+; struct: pos
+; property: x(number): x-coordinate of the position
+; property: y(number): y-coordinate of the position
+(define-struct pos (x y))
+
+; struct: obj
+; property: im(image): image of the object
+; property: pos(pos): position of the object 
+(define-struct obj (im pos))
+
+; struct: game
+; property: circle(obj): circle object that would be matched with the square
+; property: square(obj): square object to be aimed
+; property: score(number): score of the game. once the circle is successfully matched with the score, it will increase
+(define-struct game (shapes numbers colors score menu gameOver current_scene))
+
+(define-struct shapes (circle mainCircle mainSquare mainTriangle square triangle score button))
+
+(define-struct numbers (n0 n1 n2 n3 n4 n5 n6 n7 n8 n9 star0 star1 star2 star3 star4 star5 star6 star7 star8 star9 score button2))
+
+(define-struct colors (f1 f2 f3 f4 f5 f6 f7 f8 c1 c2 c3 c4 c5 c6 c7 c8 score button3))
+
+(define-struct menu (startGame))
+
+(define-struct gameOver (over))
+
+; purpose: calculate the distance between given position and x, y values for cursor position
+; contract: calcDist: p(pos) x(number) y(number) -> number
+; test
+(check-expect (calcDist (make-pos 0 0) 3 4) 5)
+; function
+(define (calcDist p x y) (sqrt (+ (sqr (- (pos-x p) x))
+                                  (sqr (- (pos-y p) y)))))
+
+; purpose: check whether the cursor position is the object circle
+; contract: isInObject: o(obj) x(number) y(number) -> boolean
+; test
+(check-expect (isInObject (make-obj (circle 50 "solid" "red") (make-pos 200 200)) 175 175) #true)
+; function
+(define (isInObject o x y) (<= (calcDist (obj-pos o) x y)
+                               (/ (image-width (obj-im o)) 2) ; radius of the circle)
+                               ))
+
+; purpose: check whether circle and square is collided. it determines an offset value, so the objects are considered to be collided
+;          once the distance between them is less than the offset
+; contract: isCollided: c(obj) s(obj) offset(number) -> boolean
+; test
+(check-expect (isCollided (make-obj (circle 50 "solid" "red") (make-pos 100 100))
+                          (make-obj (circle 50 "solid" "red") (make-pos 400 250)) 0) #false)
+(check-expect (isCollided (make-obj (circle 50 "solid" "red") (make-pos 400 250))
+                          (make-obj (circle 50 "solid" "red") (make-pos 400 250)) 0) #true)
+; function
+(define (isCollided c s offset)(<= (calcDist (obj-pos c)
+                                             (pos-x (obj-pos s))
+                                             (pos-y (obj-pos s))) offset))
+
+; purpose: updates the score value with the given amount
+; contract: updateGameScore: s(number) amount(number) -> number
+; test
+(check-expect (updateGameScore 0 50) 50)
+; function
+(define (updateGameScore s amount) (+ s amount))
+
+
+; purpose: update the game with respect to the mouse interaction. if circle is matched with square then increase score and renew the circle
+; contract: updateGameOnMouse: g(game) x(number) y(number) event(mouseEvent)-> game
+; function
+(define (updateGameOnMouse g x y event)
+  (cond
+    ((and (string=? (game-current_scene g) "menu")
+          (mouse=? event "button-down")
+          (isInObject (menu-startGame (game-menu g)) x y))
+     (make-game (game-shapes g)
+                (game-numbers g)
+                (game-colors g)
+                0
+                (game-menu g)
+                (game-gameOver g)
+                "shapes"))
+
+    ((and (string=? (game-current_scene g) "shapes")
+          (mouse=? event "button-down")
+          (isInObject (shapes-button (game-shapes g)) x y))
+     (make-game (game-shapes g)
+                (game-numbers g)
+                (game-colors g)
+                (game-score g)
+                (game-menu g)
+                (game-gameOver g)
+                "numbers"))
+    
+    ((and (string=? (game-current_scene g) "numbers")
+          (mouse=? event "button-down")
+          (isInObject (numbers-button2 (game-numbers g)) x y))
+     (make-game (game-shapes g)
+                (game-numbers g)
+                (game-colors g)
+                (shapes-score (game-shapes g))
+                (game-menu g)
+                (game-gameOver g)
+                "colors"))
+
+    ((and (string=? (game-current_scene g) "colors")
+          (mouse=? event "button-down")
+          (isInObject (colors-button3 (game-colors g)) x y))
+     (make-game (game-shapes g)
+                (game-numbers g)
+                (game-colors g)
+                (game-score g)
+                (game-menu g)
+                (game-gameOver g)
+                "gameOver"))
+;
+    ((isCollided (shapes-circle (game-shapes g))(shapes-mainCircle (game-shapes g)) 10)
+      (make-game (make-shapes
+      (make-obj (obj-im (shapes-circle (game-shapes g)))(make-pos -200 -200))
+      (shapes-mainCircle (game-shapes g))
+      (shapes-mainSquare (game-shapes g))
+      (shapes-mainTriangle (game-shapes g))
+      (shapes-square (game-shapes g))
+      (shapes-triangle (game-shapes g))
+      (+ (shapes-score (game-shapes g)) 50)
+      (shapes-button (game-shapes g)))
+      (game-numbers g) (game-colors g) (game-score g) (game-menu g) (game-gameOver g) "shapes"))
+
+    ((isCollided (shapes-square (game-shapes g))(shapes-mainSquare (game-shapes g)) 10)
+      (make-game (make-shapes
+      (shapes-circle (game-shapes g))
+      (shapes-mainCircle (game-shapes g))
+      (shapes-mainSquare (game-shapes g))
+      (shapes-mainTriangle (game-shapes g))
+      (make-obj (obj-im (shapes-square (game-shapes g)))(make-pos -200 -200))
+      (shapes-triangle (game-shapes g))
+      (+ (shapes-score (game-shapes g)) 50)
+      (shapes-button (game-shapes g)))
+      (game-numbers g) (game-colors g) (game-score g) (game-menu g) (game-gameOver g) "shapes"))
+
+    ((isCollided (shapes-triangle (game-shapes g))(shapes-mainTriangle (game-shapes g)) 10)
+      (make-game (make-shapes
+      (shapes-circle (game-shapes g))
+      (shapes-mainCircle (game-shapes g))
+      (shapes-mainSquare (game-shapes g))
+      (shapes-mainTriangle (game-shapes g))
+      (shapes-square (game-shapes g))
+      (make-obj (obj-im (shapes-triangle (game-shapes g)))(make-pos -200 -200))
+      (+ (shapes-score (game-shapes g)) 50)
+      (shapes-button (game-shapes g))) 
+      (game-numbers g) (game-colors g) (game-score g) (game-menu g) (game-gameOver g) "shapes"))
+
+    ((and (mouse=? event "drag") (isInObject (shapes-circle (game-shapes g)) x y))
+         (make-game (make-shapes
+          (make-obj (obj-im (shapes-circle (game-shapes g))) (make-pos x y))
+          (shapes-mainCircle (game-shapes g))
+          (shapes-mainSquare (game-shapes g))
+          (shapes-mainTriangle (game-shapes g))
+          (shapes-square (game-shapes g))
+          (shapes-triangle (game-shapes g))
+          (shapes-score (game-shapes g))
+          (shapes-button (game-shapes g)))
+                    (game-numbers g)
+                    (game-colors g)
+                    (game-score g)
+                    (game-menu g)
+                    (game-gameOver g)
+                    (game-current_scene g)))
+    
+    ((and (mouse=? event "drag") (isInObject (shapes-square (game-shapes g)) x y))
+         (make-game (make-shapes
+          (shapes-circle (game-shapes g))
+          (shapes-mainCircle (game-shapes g))
+          (shapes-mainSquare (game-shapes g))
+          (shapes-mainTriangle (game-shapes g))
+          (make-obj (obj-im (shapes-square (game-shapes g))) (make-pos x y))
+          (shapes-triangle (game-shapes g))
+          (shapes-score (game-shapes g))
+          (shapes-button (game-shapes g)))
+                    (game-numbers g)
+                    (game-colors g)
+                    (game-score g)
+                    (game-menu g)
+                    (game-gameOver g)
+                    (game-current_scene g)))
+
+    ((and (mouse=? event "drag") (isInObject (shapes-triangle (game-shapes g)) x y))
+         (make-game (make-shapes
+          (shapes-circle (game-shapes g))
+          (shapes-mainCircle (game-shapes g))
+          (shapes-mainSquare (game-shapes g))
+          (shapes-mainTriangle (game-shapes g))
+          (shapes-square (game-shapes g))
+          (make-obj (obj-im (shapes-triangle (game-shapes g))) (make-pos x y))
+          (shapes-score (game-shapes g))
+          (shapes-button (game-shapes g)))
+                    (game-numbers g)
+                    (game-colors g)
+                    (game-score g)
+                    (game-menu g)
+                    (game-gameOver g)
+                    (game-current_scene g)))
+;
+     ((isCollided (numbers-n0 (game-numbers g))(numbers-star0 (game-numbers g)) 10) (make-game (game-shapes g) (make-numbers
+      (make-obj (obj-im (numbers-n0 (game-numbers g)))(make-pos -200 -200)) (numbers-n1 (game-numbers g)) (numbers-n2 (game-numbers g)) (numbers-n3 (game-numbers g)) (numbers-n4 (game-numbers g))
+      (numbers-n5 (game-numbers g)) (numbers-n6 (game-numbers g)) (numbers-n7 (game-numbers g)) (numbers-n8 (game-numbers g)) (numbers-n9 (game-numbers g))
+      (numbers-star0 (game-numbers g)) (numbers-star1 (game-numbers g)) (numbers-star2 (game-numbers g)) (numbers-star3 (game-numbers g)) (numbers-star4 (game-numbers g))
+      (numbers-star5 (game-numbers g)) (numbers-star6 (game-numbers g)) (numbers-star7 (game-numbers g)) (numbers-star8 (game-numbers g)) (numbers-star9 (game-numbers g))
+      (+ (numbers-score (game-numbers g)) 50) (numbers-button2 (game-numbers g))
+      ) (game-colors g) (game-score g) (game-menu g) (game-gameOver g) "numbers"))
+      ((isCollided (numbers-n1 (game-numbers g))(numbers-star1 (game-numbers g)) 10) (make-game (game-shapes g) (make-numbers
+      (numbers-n0 (game-numbers g)) (make-obj (obj-im (numbers-n1 (game-numbers g)))(make-pos -200 -200)) (numbers-n2 (game-numbers g)) (numbers-n3 (game-numbers g)) (numbers-n4 (game-numbers g))
+      (numbers-n5 (game-numbers g)) (numbers-n6 (game-numbers g)) (numbers-n7 (game-numbers g)) (numbers-n8 (game-numbers g)) (numbers-n9 (game-numbers g))
+      (numbers-star0 (game-numbers g)) (numbers-star1 (game-numbers g)) (numbers-star2 (game-numbers g)) (numbers-star3 (game-numbers g)) (numbers-star4 (game-numbers g))
+      (numbers-star5 (game-numbers g)) (numbers-star6 (game-numbers g)) (numbers-star7 (game-numbers g)) (numbers-star8 (game-numbers g)) (numbers-star9 (game-numbers g))
+      (+ (numbers-score (game-numbers g)) 50) (numbers-button2 (game-numbers g))
+      ) (game-colors g) (game-score g) (game-menu g) (game-gameOver g) "numbers"))
+      ((isCollided (numbers-n2 (game-numbers g))(numbers-star2 (game-numbers g)) 10) (make-game (game-shapes g) (make-numbers
+      (numbers-n0 (game-numbers g)) (numbers-n1 (game-numbers g)) (make-obj (obj-im (numbers-n2 (game-numbers g)))(make-pos -200 -200)) (numbers-n3 (game-numbers g)) (numbers-n4 (game-numbers g))
+      (numbers-n5 (game-numbers g)) (numbers-n6 (game-numbers g)) (numbers-n7 (game-numbers g)) (numbers-n8 (game-numbers g)) (numbers-n9 (game-numbers g))
+      (numbers-star0 (game-numbers g)) (numbers-star1 (game-numbers g)) (numbers-star2 (game-numbers g)) (numbers-star3 (game-numbers g)) (numbers-star4 (game-numbers g))
+      (numbers-star5 (game-numbers g)) (numbers-star6 (game-numbers g)) (numbers-star7 (game-numbers g)) (numbers-star8 (game-numbers g)) (numbers-star9 (game-numbers g))
+      (+ (numbers-score (game-numbers g)) 50) (numbers-button2 (game-numbers g))
+      ) (game-colors g) (game-score g) (game-menu g) (game-gameOver g) "numbers"))
+      ((isCollided (numbers-n3 (game-numbers g))(numbers-star3 (game-numbers g)) 10) (make-game (game-shapes g) (make-numbers
+      (numbers-n0 (game-numbers g)) (numbers-n1 (game-numbers g)) (numbers-n2 (game-numbers g)) (make-obj (obj-im (numbers-n3 (game-numbers g)))(make-pos -200 -200)) (numbers-n4 (game-numbers g))
+      (numbers-n5 (game-numbers g)) (numbers-n6 (game-numbers g)) (numbers-n7 (game-numbers g)) (numbers-n8 (game-numbers g)) (numbers-n9 (game-numbers g))
+      (numbers-star0 (game-numbers g)) (numbers-star1 (game-numbers g)) (numbers-star2 (game-numbers g)) (numbers-star3 (game-numbers g)) (numbers-star4 (game-numbers g))
+      (numbers-star5 (game-numbers g)) (numbers-star6 (game-numbers g)) (numbers-star7 (game-numbers g)) (numbers-star8 (game-numbers g)) (numbers-star9 (game-numbers g))
+      (+ (numbers-score (game-numbers g)) 50) (numbers-button2 (game-numbers g))
+      ) (game-colors g) (game-score g) (game-menu g) (game-gameOver g) "numbers"))
+      ((isCollided (numbers-n4 (game-numbers g))(numbers-star4 (game-numbers g)) 10) (make-game (game-shapes g) (make-numbers
+      (numbers-n0 (game-numbers g)) (numbers-n1 (game-numbers g)) (numbers-n2 (game-numbers g)) (numbers-n3 (game-numbers g)) (make-obj (obj-im (numbers-n4 (game-numbers g)))(make-pos -200 -200))
+      (numbers-n5 (game-numbers g)) (numbers-n6 (game-numbers g)) (numbers-n7 (game-numbers g)) (numbers-n8 (game-numbers g)) (numbers-n9 (game-numbers g))
+      (numbers-star0 (game-numbers g)) (numbers-star1 (game-numbers g)) (numbers-star2 (game-numbers g)) (numbers-star3 (game-numbers g)) (numbers-star4 (game-numbers g))
+      (numbers-star5 (game-numbers g)) (numbers-star6 (game-numbers g)) (numbers-star7 (game-numbers g)) (numbers-star8 (game-numbers g)) (numbers-star9 (game-numbers g))
+      (+ (numbers-score (game-numbers g)) 50) (numbers-button2 (game-numbers g))
+      ) (game-colors g) (game-score g) (game-menu g) (game-gameOver g) "numbers"))
+      ((isCollided (numbers-n5 (game-numbers g))(numbers-star5 (game-numbers g)) 10) (make-game (game-shapes g) (make-numbers
+      (numbers-n0 (game-numbers g)) (numbers-n1 (game-numbers g)) (numbers-n2 (game-numbers g)) (numbers-n3 (game-numbers g)) (numbers-n4 (game-numbers g))
+      (make-obj (obj-im (numbers-n5 (game-numbers g)))(make-pos -200 -200)) (numbers-n6 (game-numbers g)) (numbers-n7 (game-numbers g)) (numbers-n8 (game-numbers g)) (numbers-n9 (game-numbers g))
+      (numbers-star0 (game-numbers g)) (numbers-star1 (game-numbers g)) (numbers-star2 (game-numbers g)) (numbers-star3 (game-numbers g)) (numbers-star4 (game-numbers g))
+      (numbers-star5 (game-numbers g)) (numbers-star6 (game-numbers g)) (numbers-star7 (game-numbers g)) (numbers-star8 (game-numbers g)) (numbers-star9 (game-numbers g))
+      (+ (numbers-score (game-numbers g)) 50) (numbers-button2 (game-numbers g))
+      ) (game-colors g) (game-score g) (game-menu g) (game-gameOver g) "numbers"))
+      ((isCollided (numbers-n6 (game-numbers g))(numbers-star6 (game-numbers g)) 10) (make-game (game-shapes g) (make-numbers
+      (numbers-n0 (game-numbers g)) (numbers-n1 (game-numbers g)) (numbers-n2 (game-numbers g)) (numbers-n3 (game-numbers g)) (numbers-n4 (game-numbers g))
+      (numbers-n5 (game-numbers g)) (make-obj (obj-im (numbers-n6 (game-numbers g)))(make-pos -200 -200)) (numbers-n7 (game-numbers g)) (numbers-n8 (game-numbers g)) (numbers-n9 (game-numbers g))
+      (numbers-star0 (game-numbers g)) (numbers-star1 (game-numbers g)) (numbers-star2 (game-numbers g)) (numbers-star3 (game-numbers g)) (numbers-star4 (game-numbers g))
+      (numbers-star5 (game-numbers g)) (numbers-star6 (game-numbers g)) (numbers-star7 (game-numbers g)) (numbers-star8 (game-numbers g)) (numbers-star9 (game-numbers g))
+      (+ (numbers-score (game-numbers g)) 50) (numbers-button2 (game-numbers g))
+      ) (game-colors g) (game-score g) (game-menu g) (game-gameOver g) "numbers"))
+      ((isCollided (numbers-n7 (game-numbers g))(numbers-star7 (game-numbers g)) 10) (make-game (game-shapes g) (make-numbers
+      (numbers-n0 (game-numbers g)) (numbers-n1 (game-numbers g)) (numbers-n2 (game-numbers g)) (numbers-n3 (game-numbers g)) (numbers-n4 (game-numbers g))
+      (numbers-n5 (game-numbers g)) (numbers-n6 (game-numbers g)) (make-obj (obj-im (numbers-n7 (game-numbers g)))(make-pos -200 -200)) (numbers-n8 (game-numbers g)) (numbers-n9 (game-numbers g))
+      (numbers-star0 (game-numbers g)) (numbers-star1 (game-numbers g)) (numbers-star2 (game-numbers g)) (numbers-star3 (game-numbers g)) (numbers-star4 (game-numbers g))
+      (numbers-star5 (game-numbers g)) (numbers-star6 (game-numbers g)) (numbers-star7 (game-numbers g)) (numbers-star8 (game-numbers g)) (numbers-star9 (game-numbers g))
+      (+ (numbers-score (game-numbers g)) 50) (numbers-button2 (game-numbers g))
+      ) (game-colors g) (game-score g) (game-menu g) (game-gameOver g) "numbers"))
+      ((isCollided (numbers-n8 (game-numbers g))(numbers-star8 (game-numbers g)) 10) (make-game (game-shapes g) (make-numbers
+      (numbers-n0 (game-numbers g)) (numbers-n1 (game-numbers g)) (numbers-n2 (game-numbers g)) (numbers-n3 (game-numbers g)) (numbers-n4 (game-numbers g))
+      (numbers-n5 (game-numbers g)) (numbers-n6 (game-numbers g)) (numbers-n7 (game-numbers g)) (make-obj (obj-im (numbers-n8 (game-numbers g)))(make-pos -200 -200)) (numbers-n9 (game-numbers g))
+      (numbers-star0 (game-numbers g)) (numbers-star1 (game-numbers g)) (numbers-star2 (game-numbers g)) (numbers-star3 (game-numbers g)) (numbers-star4 (game-numbers g))
+      (numbers-star5 (game-numbers g)) (numbers-star6 (game-numbers g)) (numbers-star7 (game-numbers g)) (numbers-star8 (game-numbers g)) (numbers-star9 (game-numbers g))
+      (+ (numbers-score (game-numbers g)) 50) (numbers-button2 (game-numbers g))
+      ) (game-colors g) (game-score g) (game-menu g) (game-gameOver g) "numbers"))
+      ((isCollided (numbers-n9 (game-numbers g))(numbers-star9 (game-numbers g)) 10) (make-game (game-shapes g) (make-numbers
+      (numbers-n0 (game-numbers g)) (numbers-n1 (game-numbers g)) (numbers-n2 (game-numbers g)) (numbers-n3 (game-numbers g)) (numbers-n4 (game-numbers g))
+      (numbers-n5 (game-numbers g)) (numbers-n6 (game-numbers g)) (numbers-n7 (game-numbers g)) (numbers-n8 (game-numbers g)) (make-obj (obj-im (numbers-n9 (game-numbers g)))(make-pos -200 -200))
+      (numbers-star0 (game-numbers g)) (numbers-star1 (game-numbers g)) (numbers-star2 (game-numbers g)) (numbers-star3 (game-numbers g)) (numbers-star4 (game-numbers g))
+      (numbers-star5 (game-numbers g)) (numbers-star6 (game-numbers g)) (numbers-star7 (game-numbers g)) (numbers-star8 (game-numbers g)) (numbers-star9 (game-numbers g))
+      (+ (numbers-score (game-numbers g)) 50) (numbers-button2 (game-numbers g))
+      ) (game-colors g) (game-score g) (game-menu g) (game-gameOver g) "numbers"))
+
+
+    ((and (mouse=? event "drag") (isInObject (numbers-n0 (game-numbers g)) x y))
+      (make-game (game-shapes g) (make-numbers
+      (make-obj (obj-im (numbers-n0 (game-numbers g)))(make-pos x y)) (numbers-n1 (game-numbers g)) (numbers-n2 (game-numbers g)) (numbers-n3 (game-numbers g)) (numbers-n4 (game-numbers g))
+      (numbers-n5 (game-numbers g)) (numbers-n6 (game-numbers g)) (numbers-n7 (game-numbers g)) (numbers-n8 (game-numbers g)) (numbers-n9 (game-numbers g))
+      (numbers-star0 (game-numbers g)) (numbers-star1 (game-numbers g)) (numbers-star2 (game-numbers g)) (numbers-star3 (game-numbers g)) (numbers-star4 (game-numbers g))
+      (numbers-star5 (game-numbers g)) (numbers-star6 (game-numbers g)) (numbers-star7 (game-numbers g)) (numbers-star8 (game-numbers g)) (numbers-star9 (game-numbers g)) 
+      (numbers-score (game-numbers g)) (numbers-button2 (game-numbers g)))
+      (game-colors g) (game-score g) (game-menu g) (game-gameOver g) (game-current_scene g)))
+    ((and (mouse=? event "drag") (isInObject (numbers-n1 (game-numbers g)) x y))
+      (make-game (game-shapes g) (make-numbers
+      (numbers-n0 (game-numbers g)) (make-obj (obj-im (numbers-n1 (game-numbers g)))(make-pos x y)) (numbers-n2 (game-numbers g)) (numbers-n3 (game-numbers g)) (numbers-n4 (game-numbers g))
+      (numbers-n5 (game-numbers g)) (numbers-n6 (game-numbers g)) (numbers-n7 (game-numbers g)) (numbers-n8 (game-numbers g)) (numbers-n9 (game-numbers g))
+      (numbers-star0 (game-numbers g)) (numbers-star1 (game-numbers g)) (numbers-star2 (game-numbers g)) (numbers-star3 (game-numbers g)) (numbers-star4 (game-numbers g))
+      (numbers-star5 (game-numbers g)) (numbers-star6 (game-numbers g)) (numbers-star7 (game-numbers g)) (numbers-star8 (game-numbers g)) (numbers-star9 (game-numbers g)) 
+      (numbers-score (game-numbers g)) (numbers-button2 (game-numbers g)))
+      (game-colors g) (game-score g) (game-menu g) (game-gameOver g) (game-current_scene g)))
+    ((and (mouse=? event "drag") (isInObject (numbers-n2 (game-numbers g)) x y))
+      (make-game (game-shapes g) (make-numbers
+      (numbers-n0 (game-numbers g)) (numbers-n1 (game-numbers g)) (make-obj (obj-im (numbers-n2 (game-numbers g)))(make-pos x y)) (numbers-n3 (game-numbers g)) (numbers-n4 (game-numbers g))
+      (numbers-n5 (game-numbers g)) (numbers-n6 (game-numbers g)) (numbers-n7 (game-numbers g)) (numbers-n8 (game-numbers g)) (numbers-n9 (game-numbers g))
+      (numbers-star0 (game-numbers g)) (numbers-star1 (game-numbers g)) (numbers-star2 (game-numbers g)) (numbers-star3 (game-numbers g)) (numbers-star4 (game-numbers g))
+      (numbers-star5 (game-numbers g)) (numbers-star6 (game-numbers g)) (numbers-star7 (game-numbers g)) (numbers-star8 (game-numbers g)) (numbers-star9 (game-numbers g)) 
+      (numbers-score (game-numbers g)) (numbers-button2 (game-numbers g)))
+      (game-colors g) (game-score g) (game-menu g) (game-gameOver g) (game-current_scene g)))
+    ((and (mouse=? event "drag") (isInObject (numbers-n3 (game-numbers g)) x y))
+      (make-game (game-shapes g) (make-numbers
+      (numbers-n0 (game-numbers g)) (numbers-n1 (game-numbers g)) (numbers-n2 (game-numbers g)) (make-obj (obj-im (numbers-n3 (game-numbers g)))(make-pos x y)) (numbers-n4 (game-numbers g))
+      (numbers-n5 (game-numbers g)) (numbers-n6 (game-numbers g)) (numbers-n7 (game-numbers g)) (numbers-n8 (game-numbers g)) (numbers-n9 (game-numbers g))
+      (numbers-star0 (game-numbers g)) (numbers-star1 (game-numbers g)) (numbers-star2 (game-numbers g)) (numbers-star3 (game-numbers g)) (numbers-star4 (game-numbers g))
+      (numbers-star5 (game-numbers g)) (numbers-star6 (game-numbers g)) (numbers-star7 (game-numbers g)) (numbers-star8 (game-numbers g)) (numbers-star9 (game-numbers g)) 
+      (numbers-score (game-numbers g)) (numbers-button2 (game-numbers g)))
+      (game-colors g) (game-score g) (game-menu g) (game-gameOver g) (game-current_scene g)))
+    ((and (mouse=? event "drag") (isInObject (numbers-n4 (game-numbers g)) x y))
+      (make-game (game-shapes g) (make-numbers
+      (numbers-n0 (game-numbers g)) (numbers-n1 (game-numbers g)) (numbers-n2 (game-numbers g)) (numbers-n3 (game-numbers g)) (make-obj (obj-im (numbers-n4 (game-numbers g)))(make-pos x y))
+      (numbers-n5 (game-numbers g)) (numbers-n6 (game-numbers g)) (numbers-n7 (game-numbers g)) (numbers-n8 (game-numbers g)) (numbers-n9 (game-numbers g))
+      (numbers-star0 (game-numbers g)) (numbers-star1 (game-numbers g)) (numbers-star2 (game-numbers g)) (numbers-star3 (game-numbers g)) (numbers-star4 (game-numbers g))
+      (numbers-star5 (game-numbers g)) (numbers-star6 (game-numbers g)) (numbers-star7 (game-numbers g)) (numbers-star8 (game-numbers g)) (numbers-star9 (game-numbers g)) 
+      (numbers-score (game-numbers g)) (numbers-button2 (game-numbers g)))
+      (game-colors g) (game-score g) (game-menu g) (game-gameOver g) (game-current_scene g)))
+    ((and (mouse=? event "drag") (isInObject (numbers-n5 (game-numbers g)) x y))
+      (make-game (game-shapes g) (make-numbers
+      (numbers-n0 (game-numbers g)) (numbers-n1 (game-numbers g)) (numbers-n2 (game-numbers g)) (numbers-n3 (game-numbers g)) (numbers-n4 (game-numbers g))
+      (make-obj (obj-im (numbers-n5 (game-numbers g)))(make-pos x y)) (numbers-n6 (game-numbers g)) (numbers-n7 (game-numbers g)) (numbers-n8 (game-numbers g)) (numbers-n9 (game-numbers g))
+      (numbers-star0 (game-numbers g)) (numbers-star1 (game-numbers g)) (numbers-star2 (game-numbers g)) (numbers-star3 (game-numbers g)) (numbers-star4 (game-numbers g))
+      (numbers-star5 (game-numbers g)) (numbers-star6 (game-numbers g)) (numbers-star7 (game-numbers g)) (numbers-star8 (game-numbers g)) (numbers-star9 (game-numbers g)) 
+      (numbers-score (game-numbers g)) (numbers-button2 (game-numbers g)))
+      (game-colors g) (game-score g) (game-menu g) (game-gameOver g) (game-current_scene g)))
+    ((and (mouse=? event "drag") (isInObject (numbers-n6 (game-numbers g)) x y))
+      (make-game (game-shapes g) (make-numbers
+      (numbers-n0 (game-numbers g)) (numbers-n1 (game-numbers g)) (numbers-n2 (game-numbers g)) (numbers-n3 (game-numbers g)) (numbers-n4 (game-numbers g))
+      (numbers-n5 (game-numbers g)) (make-obj (obj-im (numbers-n6 (game-numbers g)))(make-pos x y)) (numbers-n7 (game-numbers g)) (numbers-n8 (game-numbers g)) (numbers-n9 (game-numbers g))
+      (numbers-star0 (game-numbers g)) (numbers-star1 (game-numbers g)) (numbers-star2 (game-numbers g)) (numbers-star3 (game-numbers g)) (numbers-star4 (game-numbers g))
+      (numbers-star5 (game-numbers g)) (numbers-star6 (game-numbers g)) (numbers-star7 (game-numbers g)) (numbers-star8 (game-numbers g)) (numbers-star9 (game-numbers g)) 
+      (numbers-score (game-numbers g)) (numbers-button2 (game-numbers g)))
+      (game-colors g) (game-score g) (game-menu g) (game-gameOver g) (game-current_scene g)))
+    ((and (mouse=? event "drag") (isInObject (numbers-n7 (game-numbers g)) x y))
+      (make-game (game-shapes g) (make-numbers
+      (numbers-n0 (game-numbers g)) (numbers-n1 (game-numbers g)) (numbers-n2 (game-numbers g)) (numbers-n3 (game-numbers g)) (numbers-n4 (game-numbers g))
+      (numbers-n5 (game-numbers g)) (numbers-n6 (game-numbers g)) (make-obj (obj-im (numbers-n7 (game-numbers g)))(make-pos x y)) (numbers-n8 (game-numbers g)) (numbers-n9 (game-numbers g))
+      (numbers-star0 (game-numbers g)) (numbers-star1 (game-numbers g)) (numbers-star2 (game-numbers g)) (numbers-star3 (game-numbers g)) (numbers-star4 (game-numbers g))
+      (numbers-star5 (game-numbers g)) (numbers-star6 (game-numbers g)) (numbers-star7 (game-numbers g)) (numbers-star8 (game-numbers g)) (numbers-star9 (game-numbers g)) 
+      (numbers-score (game-numbers g)) (numbers-button2 (game-numbers g)))
+      (game-colors g) (game-score g) (game-menu g) (game-gameOver g) (game-current_scene g)))
+    ((and (mouse=? event "drag") (isInObject (numbers-n8 (game-numbers g)) x y))
+      (make-game (game-shapes g) (make-numbers
+      (numbers-n0 (game-numbers g)) (numbers-n1 (game-numbers g)) (numbers-n2 (game-numbers g)) (numbers-n3 (game-numbers g)) (numbers-n4 (game-numbers g))
+      (numbers-n5 (game-numbers g)) (numbers-n6 (game-numbers g)) (numbers-n7 (game-numbers g)) (make-obj (obj-im (numbers-n8 (game-numbers g)))(make-pos x y)) (numbers-n9 (game-numbers g))
+      (numbers-star0 (game-numbers g)) (numbers-star1 (game-numbers g)) (numbers-star2 (game-numbers g)) (numbers-star3 (game-numbers g)) (numbers-star4 (game-numbers g))
+      (numbers-star5 (game-numbers g)) (numbers-star6 (game-numbers g)) (numbers-star7 (game-numbers g)) (numbers-star8 (game-numbers g)) (numbers-star9 (game-numbers g)) 
+      (numbers-score (game-numbers g)) (numbers-button2 (game-numbers g)))
+      (game-colors g) (game-score g) (game-menu g) (game-gameOver g) (game-current_scene g)))
+    ((and (mouse=? event "drag") (isInObject (numbers-n9 (game-numbers g)) x y))
+      (make-game (game-shapes g) (make-numbers
+      (numbers-n0 (game-numbers g)) (numbers-n1 (game-numbers g)) (numbers-n2 (game-numbers g)) (numbers-n3 (game-numbers g)) (numbers-n4 (game-numbers g))
+      (numbers-n5 (game-numbers g)) (numbers-n6 (game-numbers g)) (numbers-n7 (game-numbers g)) (numbers-n8 (game-numbers g)) (make-obj (obj-im (numbers-n9 (game-numbers g)))(make-pos x y))
+      (numbers-star0 (game-numbers g)) (numbers-star1 (game-numbers g)) (numbers-star2 (game-numbers g)) (numbers-star3 (game-numbers g)) (numbers-star4 (game-numbers g))
+      (numbers-star5 (game-numbers g)) (numbers-star6 (game-numbers g)) (numbers-star7 (game-numbers g)) (numbers-star8 (game-numbers g)) (numbers-star9 (game-numbers g)) 
+      (numbers-score (game-numbers g)) (numbers-button2 (game-numbers g)))
+      (game-colors g) (game-score g) (game-menu g) (game-gameOver g) (game-current_scene g)))
+    
+                                         ((isCollided (colors-f1 (game-colors g))(colors-c1 (game-colors g)) 10) (make-game (game-shapes g) (game-numbers g) (make-colors
+      (make-obj (obj-im (colors-f1 (game-colors g)))(make-pos -200 -200)) (colors-f2 (game-colors g)) (colors-f3 (game-colors g)) (colors-f4 (game-colors g))
+      (colors-f5 (game-colors g)) (colors-f6 (game-colors g)) (colors-f7 (game-colors g)) (colors-f8 (game-colors g))
+      (colors-c1 (game-colors g)) (colors-c2 (game-colors g)) (colors-c3 (game-colors g)) (colors-c4 (game-colors g))
+      (colors-c5 (game-colors g)) (colors-c6 (game-colors g)) (colors-c7 (game-colors g)) (colors-c8 (game-colors g))
+      (+ (colors-score (game-colors g)) 50) (colors-button3 (game-colors g)))(game-score g) (game-menu g) (game-gameOver g) "colors"))
+                                         ((isCollided (colors-f2 (game-colors g))(colors-c2 (game-colors g)) 10) (make-game (game-shapes g) (game-numbers g) (make-colors
+      (colors-f1 (game-colors g)) (make-obj (obj-im (colors-f2 (game-colors g)))(make-pos -200 -200)) (colors-f3 (game-colors g)) (colors-f4 (game-colors g))
+      (colors-f5 (game-colors g)) (colors-f6 (game-colors g)) (colors-f7 (game-colors g)) (colors-f8 (game-colors g))
+      (colors-c1 (game-colors g)) (colors-c2 (game-colors g)) (colors-c3 (game-colors g)) (colors-c4 (game-colors g))
+      (colors-c5 (game-colors g)) (colors-c6 (game-colors g)) (colors-c7 (game-colors g)) (colors-c8 (game-colors g))
+      (+ (colors-score (game-colors g)) 50) (colors-button3 (game-colors g)))(game-score g) (game-menu g) (game-gameOver g) "colors"))
+                                         ((isCollided (colors-f3 (game-colors g))(colors-c3 (game-colors g)) 10) (make-game (game-shapes g) (game-numbers g) (make-colors
+      (colors-f1 (game-colors g)) (colors-f2 (game-colors g)) (make-obj (obj-im (colors-f3 (game-colors g)))(make-pos -200 -200)) (colors-f4 (game-colors g))
+      (colors-f5 (game-colors g)) (colors-f6 (game-colors g)) (colors-f7 (game-colors g)) (colors-f8 (game-colors g))
+      (colors-c1 (game-colors g)) (colors-c2 (game-colors g)) (colors-c3 (game-colors g)) (colors-c4 (game-colors g))
+      (colors-c5 (game-colors g)) (colors-c6 (game-colors g)) (colors-c7 (game-colors g)) (colors-c8 (game-colors g))
+      (+ (colors-score (game-colors g)) 50) (colors-button3 (game-colors g)))(game-score g) (game-menu g) (game-gameOver g) "colors"))
+                                         ((isCollided (colors-f4 (game-colors g))(colors-c4 (game-colors g)) 10) (make-game (game-shapes g) (game-numbers g) (make-colors
+      (colors-f1 (game-colors g)) (colors-f2 (game-colors g)) (colors-f3 (game-colors g)) (make-obj (obj-im (colors-f4 (game-colors g)))(make-pos -200 -200))
+      (colors-f5 (game-colors g)) (colors-f6 (game-colors g)) (colors-f7 (game-colors g)) (colors-f8 (game-colors g))
+      (colors-c1 (game-colors g)) (colors-c2 (game-colors g)) (colors-c3 (game-colors g)) (colors-c4 (game-colors g))
+      (colors-c5 (game-colors g)) (colors-c6 (game-colors g)) (colors-c7 (game-colors g)) (colors-c8 (game-colors g))
+      (+ (colors-score (game-colors g)) 50) (colors-button3 (game-colors g)))(game-score g) (game-menu g) (game-gameOver g) "colors"))
+                                         ((isCollided (colors-f5 (game-colors g))(colors-c5 (game-colors g)) 10) (make-game (game-shapes g) (game-numbers g) (make-colors
+      (colors-f1 (game-colors g)) (colors-f2 (game-colors g)) (colors-f3 (game-colors g)) (colors-f4 (game-colors g))
+      (make-obj (obj-im (colors-f5 (game-colors g)))(make-pos -200 -200)) (colors-f6 (game-colors g)) (colors-f7 (game-colors g)) (colors-f8 (game-colors g))
+      (colors-c1 (game-colors g)) (colors-c2 (game-colors g)) (colors-c3 (game-colors g)) (colors-c4 (game-colors g))
+      (colors-c5 (game-colors g)) (colors-c6 (game-colors g)) (colors-c7 (game-colors g)) (colors-c8 (game-colors g))
+      (+ (colors-score (game-colors g)) 50) (colors-button3 (game-colors g)))(game-score g) (game-menu g) (game-gameOver g) "colors"))
+                                         ((isCollided (colors-f6 (game-colors g))(colors-c6 (game-colors g)) 10) (make-game (game-shapes g) (game-numbers g) (make-colors
+      (colors-f1 (game-colors g)) (colors-f2 (game-colors g)) (colors-f3 (game-colors g)) (colors-f4 (game-colors g))
+      (colors-f5 (game-colors g)) (make-obj (obj-im (colors-f6 (game-colors g)))(make-pos -200 -200)) (colors-f7 (game-colors g)) (colors-f8 (game-colors g))
+      (colors-c1 (game-colors g)) (colors-c2 (game-colors g)) (colors-c3 (game-colors g)) (colors-c4 (game-colors g))
+      (colors-c5 (game-colors g)) (colors-c6 (game-colors g)) (colors-c7 (game-colors g)) (colors-c8 (game-colors g))
+      (+ (colors-score (game-colors g)) 50) (colors-button3 (game-colors g)))(game-score g) (game-menu g) (game-gameOver g) "colors"))
+                                         ((isCollided (colors-f7 (game-colors g))(colors-c7 (game-colors g)) 10) (make-game (game-shapes g) (game-numbers g) (make-colors
+      (colors-f1 (game-colors g)) (colors-f2 (game-colors g)) (colors-f3 (game-colors g)) (colors-f4 (game-colors g))
+      (colors-f5 (game-colors g)) (colors-f6 (game-colors g)) (make-obj (obj-im (colors-f7 (game-colors g)))(make-pos -200 -200)) (colors-f8 (game-colors g))
+      (colors-c1 (game-colors g)) (colors-c2 (game-colors g)) (colors-c3 (game-colors g)) (colors-c4 (game-colors g))
+      (colors-c5 (game-colors g)) (colors-c6 (game-colors g)) (colors-c7 (game-colors g)) (colors-c8 (game-colors g))
+      (+ (colors-score (game-colors g)) 50) (colors-button3 (game-colors g)))(game-score g) (game-menu g) (game-gameOver g) "colors"))
+                                         ((isCollided (colors-f8 (game-colors g))(colors-c8 (game-colors g)) 10) (make-game (game-shapes g) (game-numbers g) (make-colors
+      (colors-f1 (game-colors g)) (colors-f2 (game-colors g)) (colors-f3 (game-colors g)) (colors-f4 (game-colors g))
+      (colors-f5 (game-colors g)) (colors-f6 (game-colors g)) (colors-f7 (game-colors g)) (make-obj (obj-im (colors-f8 (game-colors g)))(make-pos -200 -200))
+      (colors-c1 (game-colors g)) (colors-c2 (game-colors g)) (colors-c3 (game-colors g)) (colors-c4 (game-colors g))
+      (colors-c5 (game-colors g)) (colors-c6 (game-colors g)) (colors-c7 (game-colors g)) (colors-c8 (game-colors g))
+      (+ (colors-score (game-colors g)) 50) (colors-button3 (game-colors g)))(game-score g) (game-menu g) (game-gameOver g) "colors"))
+                                         
+                                         ((and (mouse=? event "drag") (isInObject (colors-f1 (game-colors g)) x y)) (make-game (game-shapes g) (game-numbers g) (make-colors
+      (make-obj (obj-im (colors-f1 (game-colors g)))(make-pos x y)) (colors-f2 (game-colors g)) (colors-f3 (game-colors g)) (colors-f4 (game-colors g))
+      (colors-f5 (game-colors g)) (colors-f6 (game-colors g)) (colors-f7 (game-colors g)) (colors-f8 (game-colors g))
+      (colors-c1 (game-colors g)) (colors-c2 (game-colors g)) (colors-c3 (game-colors g)) (colors-c4 (game-colors g))
+      (colors-c5 (game-colors g)) (colors-c6 (game-colors g)) (colors-c7 (game-colors g)) (colors-c8 (game-colors g))
+      (colors-score (game-colors g)) (colors-button3 (game-colors g)))
+      (game-score g) (game-menu g) (game-gameOver g) (game-current_scene g)))
+                                         ((and (mouse=? event "drag") (isInObject (colors-f2 (game-colors g)) x y)) (make-game (game-shapes g) (game-numbers g) (make-colors
+      (colors-f1 (game-colors g)) (make-obj (obj-im (colors-f2 (game-colors g)))(make-pos x y)) (colors-f3 (game-colors g)) (colors-f4 (game-colors g))
+      (colors-f5 (game-colors g)) (colors-f6 (game-colors g)) (colors-f7 (game-colors g)) (colors-f8 (game-colors g))
+      (colors-c1 (game-colors g)) (colors-c2 (game-colors g)) (colors-c3 (game-colors g)) (colors-c4 (game-colors g))
+      (colors-c5 (game-colors g)) (colors-c6 (game-colors g)) (colors-c7 (game-colors g)) (colors-c8 (game-colors g))
+      (colors-score (game-colors g)) (colors-button3 (game-colors g)))
+      (game-score g) (game-menu g) (game-gameOver g) (game-current_scene g)))
+                                         ((and (mouse=? event "drag") (isInObject (colors-f3 (game-colors g)) x y)) (make-game (game-shapes g) (game-numbers g) (make-colors
+      (colors-f1 (game-colors g)) (colors-f2 (game-colors g)) (make-obj (obj-im (colors-f3 (game-colors g)))(make-pos x y)) (colors-f4 (game-colors g))
+      (colors-f5 (game-colors g)) (colors-f6 (game-colors g)) (colors-f7 (game-colors g)) (colors-f8 (game-colors g))
+      (colors-c1 (game-colors g)) (colors-c2 (game-colors g)) (colors-c3 (game-colors g)) (colors-c4 (game-colors g))
+      (colors-c5 (game-colors g)) (colors-c6 (game-colors g)) (colors-c7 (game-colors g)) (colors-c8 (game-colors g))
+      (colors-score (game-colors g)) (colors-button3 (game-colors g)))
+      (game-score g) (game-menu g) (game-gameOver g) (game-current_scene g)))
+                                         ((and (mouse=? event "drag") (isInObject (colors-f4 (game-colors g)) x y)) (make-game (game-shapes g) (game-numbers g) (make-colors
+      (colors-f1 (game-colors g)) (colors-f2 (game-colors g)) (colors-f3 (game-colors g)) (make-obj (obj-im (colors-f4 (game-colors g)))(make-pos x y))
+      (colors-f5 (game-colors g)) (colors-f6 (game-colors g)) (colors-f7 (game-colors g)) (colors-f8 (game-colors g))
+      (colors-c1 (game-colors g)) (colors-c2 (game-colors g)) (colors-c3 (game-colors g)) (colors-c4 (game-colors g))
+      (colors-c5 (game-colors g)) (colors-c6 (game-colors g)) (colors-c7 (game-colors g)) (colors-c8 (game-colors g))
+      (colors-score (game-colors g)) (colors-button3 (game-colors g)))
+      (game-score g) (game-menu g) (game-gameOver g) (game-current_scene g)))
+                                         ((and (mouse=? event "drag") (isInObject (colors-f5 (game-colors g)) x y)) (make-game (game-shapes g) (game-numbers g) (make-colors
+      (colors-f1 (game-colors g)) (colors-f2 (game-colors g)) (colors-f3 (game-colors g)) (colors-f4 (game-colors g))
+      (make-obj (obj-im (colors-f5 (game-colors g)))(make-pos x y)) (colors-f6 (game-colors g)) (colors-f7 (game-colors g)) (colors-f8 (game-colors g))
+      (colors-c1 (game-colors g)) (colors-c2 (game-colors g)) (colors-c3 (game-colors g)) (colors-c4 (game-colors g))
+      (colors-c5 (game-colors g)) (colors-c6 (game-colors g)) (colors-c7 (game-colors g)) (colors-c8 (game-colors g))
+      (colors-score (game-colors g)) (colors-button3 (game-colors g)))
+      (game-score g) (game-menu g) (game-gameOver g) (game-current_scene g)))
+                                         ((and (mouse=? event "drag") (isInObject (colors-f6 (game-colors g)) x y)) (make-game (game-shapes g) (game-numbers g) (make-colors
+      (colors-f1 (game-colors g)) (colors-f2 (game-colors g)) (colors-f3 (game-colors g)) (colors-f4 (game-colors g))
+      (colors-f5 (game-colors g)) (make-obj (obj-im (colors-f6 (game-colors g)))(make-pos x y)) (colors-f7 (game-colors g)) (colors-f8 (game-colors g))
+      (colors-c1 (game-colors g)) (colors-c2 (game-colors g)) (colors-c3 (game-colors g)) (colors-c4 (game-colors g))
+      (colors-c5 (game-colors g)) (colors-c6 (game-colors g)) (colors-c7 (game-colors g)) (colors-c8 (game-colors g))
+      (colors-score (game-colors g)) (colors-button3 (game-colors g)))
+      (game-score g) (game-menu g) (game-gameOver g) (game-current_scene g)))
+                                         ((and (mouse=? event "drag") (isInObject (colors-f7 (game-colors g)) x y)) (make-game (game-shapes g) (game-numbers g) (make-colors
+      (colors-f1 (game-colors g)) (colors-f2 (game-colors g)) (colors-f3 (game-colors g)) (colors-f4 (game-colors g))
+      (colors-f5 (game-colors g)) (colors-f6 (game-colors g)) (make-obj (obj-im (colors-f7 (game-colors g)))(make-pos x y)) (colors-f8 (game-colors g))
+      (colors-c1 (game-colors g)) (colors-c2 (game-colors g)) (colors-c3 (game-colors g)) (colors-c4 (game-colors g))
+      (colors-c5 (game-colors g)) (colors-c6 (game-colors g)) (colors-c7 (game-colors g)) (colors-c8 (game-colors g))
+      (colors-score (game-colors g)) (colors-button3 (game-colors g)))
+      (game-score g) (game-menu g) (game-gameOver g) (game-current_scene g)))
+                                         ((and (mouse=? event "drag") (isInObject (colors-f8 (game-colors g)) x y)) (make-game (game-shapes g) (game-numbers g) (make-colors
+      (colors-f1 (game-colors g)) (colors-f2 (game-colors g)) (colors-f3 (game-colors g)) (colors-f4 (game-colors g))
+      (colors-f5 (game-colors g)) (colors-f6 (game-colors g)) (colors-f7 (game-colors g)) (make-obj (obj-im (colors-f8 (game-colors g)))(make-pos x y)) 
+      (colors-c1 (game-colors g)) (colors-c2 (game-colors g)) (colors-c3 (game-colors g)) (colors-c4 (game-colors g))
+      (colors-c5 (game-colors g)) (colors-c6 (game-colors g)) (colors-c7 (game-colors g)) (colors-c8 (game-colors g))
+      (colors-score (game-colors g)) (colors-button3 (game-colors g)))
+      (game-score g) (game-menu g) (game-gameOver g) (game-current_scene g)))
+    (else g)))
+
+; purpose: draw the game to the scene
+; contract: drawGame: o(obj) -> image
+; test
+;(check-expect (drawGame (make-game (make-obj (circle 50 "solid" "red") (make-pos 100 100))
+;                                   (make-obj (circle 50 "solid" "red") (make-pos 100 100))
+;                                   (make-obj (square 50 "solid" "red") (make-pos 400 250))
+;                                   (make-obj (triangle 50 "solid" "red") (make-pos 400 250)) 0)) (place-image (circle 50 "solid" "red") 100 100
+;                                                                                                 (place-image (circle 50 "solid" "red") 100 100
+;                                                                                                 (place-image (square 50 "solid" "red") 400 250
+;                                                                                                 (place-image (triangle 50 "solid" "red") 400 250
+;                                                                                                 (place-image (text "Score: 0" 25 "orange") 925 50
+;                                                                                                 (empty-scene 1000 1000)))))))
+; function
+(define (drawGame g)
+  (cond
+    ((string=? (game-current_scene g) "menu") (drawMenu (game-menu g)))   ; Draw the menu scene
+    ((string=? (game-current_scene g) "shapes") (drawShapes (game-shapes g)))   ; Draw the gameplay scene
+    ((string=? (game-current_scene g) "numbers") (drawNumbers (game-numbers g)))
+    ((string=? (game-current_scene g) "colors") (drawColors (game-colors g)))
+    ((string=? (game-current_scene g) "gameOver") (drawGameOver (game-gameOver g)))
+    (else (empty-scene 800 800))))
+  
+(define (drawMenu g) (place-image (obj-im (menu-startGame g)) (pos-x (obj-pos (menu-startGame g))) (pos-y (obj-pos (menu-startGame g)))
+                                  (place-image (text/font "Playful Learning"  55 "Light Purple" "modern" 'swiss 'normal 'bold #f) 400 170
+                                  (empty-scene 800 800))))
+
+(define (drawGameOver g) (place-image (text/font "Game is over"  45 "turquoise" "modern" 'swiss 'normal 'bold #f) 400 400
+                                      (empty-scene 800 800)))
+
+(define (drawShapes g)  (place-image (text (string-append "Score: " (number->string (shapes-score g))) 25 "orange") 725 50
+                        (place-image (obj-im (shapes-button g)) (pos-x (obj-pos (shapes-button g))) (pos-y (obj-pos (shapes-button g)))
+                        (place-image (obj-im (shapes-circle g)) (pos-x (obj-pos (shapes-circle g))) (pos-y (obj-pos (shapes-circle g)))
+                        (place-image (obj-im (shapes-mainCircle g)) (pos-x (obj-pos (shapes-mainCircle g))) (pos-y (obj-pos (shapes-mainCircle g)))
+                        (place-image (obj-im (shapes-mainSquare g)) (pos-x (obj-pos (shapes-mainSquare g))) (pos-y (obj-pos (shapes-mainSquare g)))
+                        (place-image (obj-im (shapes-mainTriangle g)) (pos-x (obj-pos (shapes-mainTriangle g))) (pos-y (obj-pos (shapes-mainTriangle g)))
+                        (place-image (obj-im (shapes-square g)) (pos-x (obj-pos (shapes-square g))) (pos-y (obj-pos (shapes-square g)))
+                        (place-image (obj-im (shapes-triangle g)) (pos-x (obj-pos (shapes-triangle g))) (pos-y (obj-pos (shapes-triangle g)))
+                        (empty-scene 800 800))))))))))
+
+(define (drawNumbers g) (place-image (text (string-append "Score: " (number->string (numbers-score g))) 25 "orange") 600 50
+                        (place-image (obj-im (numbers-button2 g)) (pos-x (obj-pos (numbers-button2 g))) (pos-y (obj-pos (numbers-button2 g)))
+                        (place-image (obj-im (numbers-n0 g)) (pos-x (obj-pos (numbers-n0 g))) (pos-y (obj-pos (numbers-n0 g)))   (place-image (obj-im (numbers-star0 g)) (pos-x (obj-pos (numbers-star0 g))) (pos-y (obj-pos (numbers-star0 g)))
+                           (place-image (obj-im (numbers-n1 g)) (pos-x (obj-pos (numbers-n1 g))) (pos-y (obj-pos (numbers-n1 g)))   (place-image (obj-im (numbers-star1 g)) (pos-x (obj-pos (numbers-star1 g))) (pos-y (obj-pos (numbers-star1 g)))
+                              (place-image (obj-im (numbers-n2 g)) (pos-x (obj-pos (numbers-n2 g))) (pos-y (obj-pos (numbers-n2 g)))   (place-image (obj-im (numbers-star2 g)) (pos-x (obj-pos (numbers-star2 g))) (pos-y (obj-pos (numbers-star2 g)))
+                                 (place-image (obj-im (numbers-n3 g)) (pos-x (obj-pos (numbers-n3 g))) (pos-y (obj-pos (numbers-n3 g)))   (place-image (obj-im (numbers-star3 g)) (pos-x (obj-pos (numbers-star3 g))) (pos-y (obj-pos (numbers-star3 g)))
+                                    (place-image (obj-im (numbers-n4 g)) (pos-x (obj-pos (numbers-n4 g))) (pos-y (obj-pos (numbers-n4 g)))   (place-image (obj-im (numbers-star4 g)) (pos-x (obj-pos (numbers-star4 g))) (pos-y (obj-pos (numbers-star4 g)))
+                                       (place-image (obj-im (numbers-n5 g)) (pos-x (obj-pos (numbers-n5 g))) (pos-y (obj-pos (numbers-n5 g)))   (place-image (obj-im (numbers-star5 g)) (pos-x (obj-pos (numbers-star5 g))) (pos-y (obj-pos (numbers-star5 g)))
+                                          (place-image (obj-im (numbers-n6 g)) (pos-x (obj-pos (numbers-n6 g))) (pos-y (obj-pos (numbers-n6 g)))   (place-image (obj-im (numbers-star6 g)) (pos-x (obj-pos (numbers-star6 g))) (pos-y (obj-pos (numbers-star6 g)))
+                                             (place-image (obj-im (numbers-n7 g)) (pos-x (obj-pos (numbers-n7 g))) (pos-y (obj-pos (numbers-n7 g)))   (place-image (obj-im (numbers-star7 g)) (pos-x (obj-pos (numbers-star7 g))) (pos-y (obj-pos (numbers-star7 g)))
+                                                (place-image (obj-im (numbers-n8 g)) (pos-x (obj-pos (numbers-n8 g))) (pos-y (obj-pos (numbers-n8 g)))   (place-image (obj-im (numbers-star8 g)) (pos-x (obj-pos (numbers-star8 g))) (pos-y (obj-pos (numbers-star8 g)))
+                                                   (place-image (obj-im (numbers-n9 g)) (pos-x (obj-pos (numbers-n9 g))) (pos-y (obj-pos (numbers-n9 g)))   (place-image (obj-im (numbers-star9 g)) (pos-x (obj-pos (numbers-star9 g))) (pos-y (obj-pos (numbers-star9 g)))
+                                                      (empty-scene 800 800))))))))))))))))))))))))
+
+(define (drawColors g) (place-image (text (string-append "Score: " (number->string (colors-score g))) 25 "orange") 600 50
+                       (place-image (obj-im (colors-button3 g)) (pos-x (obj-pos (colors-button3 g))) (pos-y (obj-pos (colors-button3 g)))
+                        (place-image (obj-im (colors-f1 g)) (pos-x (obj-pos (colors-f1 g))) (pos-y (obj-pos (colors-f1 g)))   (place-image (obj-im (colors-c1 g)) (pos-x (obj-pos (colors-c1 g))) (pos-y (obj-pos (colors-c1 g)))
+                           (place-image (obj-im (colors-f2 g)) (pos-x (obj-pos (colors-f2 g))) (pos-y (obj-pos (colors-f2 g)))   (place-image (obj-im (colors-c2 g)) (pos-x (obj-pos (colors-c2 g))) (pos-y (obj-pos (colors-c2 g)))
+                              (place-image (obj-im (colors-f3 g)) (pos-x (obj-pos (colors-f3 g))) (pos-y (obj-pos (colors-f3 g)))   (place-image (obj-im (colors-c3 g)) (pos-x (obj-pos (colors-c3 g))) (pos-y (obj-pos (colors-c3 g)))
+                                 (place-image (obj-im (colors-f4 g)) (pos-x (obj-pos (colors-f4 g))) (pos-y (obj-pos (colors-f4 g)))   (place-image (obj-im (colors-c4 g)) (pos-x (obj-pos (colors-c4 g))) (pos-y (obj-pos (colors-c4 g)))
+                                    (place-image (obj-im (colors-f5 g)) (pos-x (obj-pos (colors-f5 g))) (pos-y (obj-pos (colors-f5 g)))   (place-image (obj-im (colors-c5 g)) (pos-x (obj-pos (colors-c5 g))) (pos-y (obj-pos (colors-c5 g)))
+                                       (place-image (obj-im (colors-f6 g)) (pos-x (obj-pos (colors-f6 g))) (pos-y (obj-pos (colors-f6 g)))   (place-image (obj-im (colors-c6 g)) (pos-x (obj-pos (colors-c6 g))) (pos-y (obj-pos (colors-c6 g)))
+                                          (place-image (obj-im (colors-f7 g)) (pos-x (obj-pos (colors-f7 g))) (pos-y (obj-pos (colors-f7 g)))   (place-image (obj-im (colors-c7 g)) (pos-x (obj-pos (colors-c7 g))) (pos-y (obj-pos (colors-c7 g)))
+                                             (place-image (obj-im (colors-f8 g)) (pos-x (obj-pos (colors-f8 g))) (pos-y (obj-pos (colors-f8 g)))   (place-image (obj-im (colors-c8 g)) (pos-x (obj-pos (colors-c8 g))) (pos-y (obj-pos (colors-c8 g)))
+                                                      (empty-scene 800 800))))))))))))))))))))
+
+; purpose: update the scene based on certain conditions
+; contract: updateScene: g(game) new_scene(string) -> game
+; function
+(define (updateScene g new_scene)
+  (make-game (game-shapes g)
+             (game-numbers g)
+             (game-colors g)
+             (game-score g)
+             (game-menu g)
+             (game-gameOver g)
+             new_scene))
+
+; big-bang
+(define CIRCLE (make-obj (circle 50 "solid" "blue")  (make-pos 400 500)))
+(define MAINCIRCLE (make-obj (circle 75 "solid" "red") (make-pos 90 200)))
+(define MAINSQUARE (make-obj (square 150 "solid" "red") (make-pos 700 200)))
+(define MAINTRIANGLE (make-obj (triangle 150 "solid" "red") (make-pos 400 650)))
+(define SQUARE (make-obj (square 100 "solid" "blue") (make-pos 400 375)))
+(define TRIANGLE (make-obj (triangle 100 "solid" "blue") (make-pos 400 250)))
+(define MENU (make-obj (polygon (list (make-posn -5 0)(make-posn -5 70)(make-posn 140 0)(make-posn -5 -70))"solid" "gray") (make-pos 400 400)))
+(define BUTTON (make-obj (polygon (list (make-posn -5 0)(make-posn -5 35)(make-posn 70 0)(make-posn -5 -35))"solid" "gray") (make-pos 700 700)))
+(define BUTTON2 (make-obj (polygon (list (make-posn -5 0)(make-posn -5 35)(make-posn 70 0)(make-posn -5 -35))"solid" "gray") (make-pos 615 740)))
+(define BUTTON3 (make-obj (polygon (list (make-posn -5 0)(make-posn -5 35)(make-posn 70 0)(make-posn -5 -35))"solid" "gray") (make-pos 615 740)))
+(define n0-image (bitmap "n0.png")) (define n0-pos (make-pos 75 100)) (define n0 (make-obj n0-image n0-pos))
+(define n1-image (bitmap "n1.png")) (define n1-pos (make-pos 75 250)) (define n1 (make-obj n1-image n1-pos))
+(define n2-image (bitmap "n2.png")) (define n2-pos (make-pos 75 400)) (define n2 (make-obj n2-image n2-pos))
+(define n3-image (bitmap "n3.png")) (define n3-pos (make-pos 75 550)) (define n3 (make-obj n3-image n3-pos))
+(define n4-image (bitmap "n4.png")) (define n4-pos (make-pos 75 700)) (define n4 (make-obj n4-image n4-pos))
+(define n5-image (bitmap "n5.png")) (define n5-pos (make-pos 725 100)) (define n5 (make-obj n5-image n5-pos))
+(define n6-image (bitmap "n6.png")) (define n6-pos (make-pos 725 250)) (define n6 (make-obj n6-image n6-pos))
+(define n7-image (bitmap "n7.png")) (define n7-pos (make-pos 725 400)) (define n7 (make-obj n7-image n7-pos))
+(define n8-image (bitmap "n8.png")) (define n8-pos (make-pos 725 550)) (define n8 (make-obj n8-image n8-pos))
+(define n9-image (bitmap "n9.png")) (define n9-pos (make-pos 725 700)) (define n9 (make-obj n9-image n9-pos))
+(define STAR (star 22 "solid" "goldenrod"))
+(define BIGCIRCLE (circle 70 "solid" "lightblue"))
+(define star0 (make-obj BIGCIRCLE (make-pos 325 100)))
+(define star1 (make-obj (overlay STAR BIGCIRCLE) (make-pos 325 250)))
+(define star2 (make-obj (overlay(beside STAR STAR) BIGCIRCLE) (make-pos 325 400)))
+(define star3 (make-obj (overlay(above (beside STAR STAR) STAR) BIGCIRCLE) (make-pos 325 550)))
+(define star4 (make-obj (overlay(above (beside STAR STAR) (beside STAR STAR)) BIGCIRCLE) (make-pos 325 700)))
+(define star5 (make-obj (overlay(overlay(above (beside STAR STAR)(beside STAR STAR)) STAR) BIGCIRCLE) (make-pos 475 100)))
+(define star6 (make-obj (overlay(above (beside STAR STAR STAR)(beside STAR STAR STAR)) BIGCIRCLE) (make-pos 475 250)))
+(define star7 (make-obj (overlay(above (beside STAR STAR STAR) (beside STAR STAR STAR) STAR) BIGCIRCLE) (make-pos 475 400)))
+(define star8 (make-obj (overlay(above (above (beside STAR STAR STAR) (beside STAR STAR STAR)) (beside STAR STAR)) BIGCIRCLE) (make-pos 475 550)))
+(define star9 (make-obj (overlay(above (beside STAR STAR STAR)(beside STAR STAR STAR)(beside STAR STAR STAR)) BIGCIRCLE) (make-pos 475 700)))
+(define c1 (make-obj (square 100 "solid" "red")  (make-pos 350 250)))
+(define c2 (make-obj (square 100 "solid" "yellow")  (make-pos 450 250)))
+(define c3 (make-obj (square 100 "solid" "orange")  (make-pos 350 350)))
+(define c4 (make-obj (square 100 "solid" "lawngreen")  (make-pos 450 350)))
+(define c5 (make-obj (square 100 "solid" "blue")  (make-pos 350 450)))
+(define c6 (make-obj (square 100 "solid" "purple")  (make-pos 450 450)))
+(define c7 (make-obj (square 100 "solid" "brown")  (make-pos 350 550)))
+(define c8 (make-obj (square 100 "solid" "hotpink")  (make-pos 450 550)))
+(define f1-image (bitmap "f1.png")) (define f1-pos (make-pos 80 175)) (define f1 (make-obj f1-image f1-pos))
+(define f2-image (bitmap "f2.png")) (define f2-pos (make-pos 80 325)) (define f2 (make-obj f2-image f2-pos))
+(define f3-image (bitmap "f3.png")) (define f3-pos (make-pos 80 475)) (define f3 (make-obj f3-image f3-pos))
+(define f4-image (bitmap "f4.png")) (define f4-pos (make-pos 88 625)) (define f4 (make-obj f4-image f4-pos))
+(define f5-image (bitmap "f5.png")) (define f5-pos (make-pos 720 175)) (define f5 (make-obj f5-image f5-pos))
+(define f6-image (bitmap "f6.png")) (define f6-pos (make-pos 720 325)) (define f6 (make-obj f6-image f6-pos))
+(define f7-image (bitmap "f7.png")) (define f7-pos (make-pos 720 475)) (define f7 (make-obj f7-image f7-pos))
+(define f8-image (bitmap "f8.png")) (define f8-pos (make-pos 720 625)) (define f8 (make-obj f8-image f8-pos))
+
+
+(define SHAPES (make-shapes CIRCLE MAINCIRCLE MAINSQUARE MAINTRIANGLE SQUARE TRIANGLE 0 BUTTON))
+
+(define NUMBERS (make-numbers n0 n1 n2 n3 n4 n5 n6 n7 n8 n9
+                              star0 star1 star2 star3 star4 star5 star6 star7 star8 star9 0 BUTTON2))
+
+(define COLORS (make-colors f1 f2 f3 f4 f5 f6 f7 f8
+                             c1 c2 c3 c4 c5 c6 c7 c8 0 BUTTON3))
+
+(define GAME (make-game SHAPES NUMBERS COLORS 0 (make-menu MENU) (make-gameOver 0) "menu")) 
+
+(big-bang GAME
+  (to-draw drawGame)
+  (on-mouse updateGameOnMouse))
